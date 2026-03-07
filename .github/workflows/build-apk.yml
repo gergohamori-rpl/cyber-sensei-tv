@@ -28,28 +28,19 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle Wrapper
+      - name: Download Gradle wrapper JAR
         run: |
           mkdir -p gradle/wrapper
-          curl -sL -o gradle/wrapper/gradle-wrapper.jar \
-            "https://services.gradle.org/distributions/gradle-8.5-wrapper.jar"
-          cat > gradle/wrapper/gradle-wrapper.properties << 'PROPS'
-          distributionBase=GRADLE_USER_HOME
-          distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
-          networkTimeout=10000
-          validateDistributionUrl=true
-          zipStoreBase=GRADLE_USER_HOME
-          zipStorePath=wrapper/dists
-          PROPS
-          sed -i 's/^          //' gradle/wrapper/gradle-wrapper.properties
-          cat > gradlew << 'GRADLEW'
-          #!/bin/sh
-          APP_HOME=$( cd "${APP_HOME:-$(dirname "$0")}" > /dev/null && pwd -P ) || exit
-          CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
-          exec java $JAVA_OPTS -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
-          GRADLEW
-          sed -i 's/^          //' gradlew
+          curl -sL -f -o gradle/wrapper/gradle-wrapper.jar "https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar"
+          ls -la gradle/wrapper/gradle-wrapper.jar
+
+      - name: Create gradle-wrapper.properties
+        run: |
+          printf 'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-bin.zip\nnetworkTimeout=10000\nvalidateDistributionUrl=true\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\n' > gradle/wrapper/gradle-wrapper.properties
+
+      - name: Create gradlew script
+        run: |
+          printf '#!/bin/sh\nAPP_HOME=$( cd "${APP_HOME:-$(dirname "$0")}" > /dev/null && pwd -P ) || exit\nCLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar\nexec java $JAVA_OPTS -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n' > gradlew
           chmod +x gradlew
 
       - name: Build Release APK
@@ -77,15 +68,12 @@ jobs:
           CYBER_SENSEI_API_KEY: ${{ secrets.CYBER_SENSEI_API_KEY }}
         run: |
           APK_FILE=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
-          
           if [ -z "$APK_FILE" ]; then
             echo "No APK file found!"
             exit 1
           fi
-          
           echo "Uploading APK: $APK_FILE"
           echo "To server: $CYBER_SENSEI_URL"
-          
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X POST "$CYBER_SENSEI_URL/api/tv/app-versions/upload" \
             -H "X-TV-Deploy-Key: $CYBER_SENSEI_API_KEY" \
@@ -94,13 +82,10 @@ jobs:
             -F "versionCode=${{ steps.version.outputs.version_code }}" \
             -F "releaseNotes=Automated build from GitHub Actions" \
             -F "setLatest=true")
-          
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | head -n -1)
-          
           echo "Response code: $HTTP_CODE"
           echo "Response body: $BODY"
-          
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
             echo "APK uploaded successfully!"
           else
