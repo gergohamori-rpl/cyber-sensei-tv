@@ -43,6 +43,22 @@ jobs:
           printf '#!/bin/sh\nAPP_HOME=$( cd "${APP_HOME:-$(dirname "$0")}" > /dev/null && pwd -P ) || exit\nCLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar\nexec java $JAVA_OPTS -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n' > gradlew
           chmod +x gradlew
 
+      - name: Generate launcher icons
+        run: |
+          for size in 48:mdpi 72:hdpi 96:xhdpi 144:xxhdpi 192:xxxhdpi; do
+            px="${size%%:*}"
+            density="${size##*:}"
+            dir="app/src/main/res/mipmap-${density}"
+            mkdir -p "$dir"
+            convert -size ${px}x${px} xc:'#F24E1E' -fill white -gravity center \
+              -font DejaVu-Sans-Bold -pointsize $((px/3)) -annotate 0 'CS' \
+              -alpha set \( +clone -threshold -1 -negate -fill white -draw "roundrectangle 0,0,${px},${px},$((px/5)),$((px/5))" \) \
+              -compose CopyOpacity -composite \
+              PNG32:"${dir}/ic_launcher.png"
+          done
+          echo "Generated launcher icons:"
+          find app/src/main/res/mipmap-* -name "*.png" -exec ls -la {} \;
+
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon
 
