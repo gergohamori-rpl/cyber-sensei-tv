@@ -7,6 +7,7 @@ on:
       - 'app/**'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
+      - 'gradle/**'
       - '.github/workflows/**'
   workflow_dispatch:
 
@@ -27,16 +28,26 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Generate Gradle Wrapper
+      - name: Setup Gradle Wrapper
         run: |
-          gradle wrapper --gradle-version 8.5
+          mkdir -p gradle/wrapper
+          curl -sL "https://services.gradle.org/distributions/gradle-8.5-bin.zip" -o /tmp/gradle-8.5.zip
+          unzip -qo /tmp/gradle-8.5.zip -d /tmp/gradle-extract
+          cp /tmp/gradle-extract/gradle-8.5/lib/gradle-wrapper-*.jar gradle/wrapper/gradle-wrapper.jar 2>/dev/null || true
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            curl -sL "https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
+          fi
+          cat > gradlew << 'GRADLEW'
+          #!/bin/sh
+          APP_HOME=$( cd "${APP_HOME:-$(dirname "$0")}" > /dev/null && pwd -P ) || exit
+          CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+          exec java $JAVA_OPTS -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
+          GRADLEW
+          sed -i 's/^          //' gradlew
           chmod +x gradlew
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Get version info
         id: version
