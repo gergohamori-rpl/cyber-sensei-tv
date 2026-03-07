@@ -45,19 +45,15 @@ jobs:
 
       - name: Generate launcher icons
         run: |
-          for size in 48:mdpi 72:hdpi 96:xhdpi 144:xxhdpi 192:xxxhdpi; do
-            px="${size%%:*}"
-            density="${size##*:}"
-            dir="app/src/main/res/mipmap-${density}"
-            mkdir -p "$dir"
-            convert -size ${px}x${px} xc:'#F24E1E' -fill white -gravity center \
-              -font DejaVu-Sans-Bold -pointsize $((px/3)) -annotate 0 'CS' \
-              -alpha set \( +clone -threshold -1 -negate -fill white -draw "roundrectangle 0,0,${px},${px},$((px/5)),$((px/5))" \) \
-              -compose CopyOpacity -composite \
-              PNG32:"${dir}/ic_launcher.png"
+          mkdir -p app/src/main/res/drawable
+          printf '<?xml version="1.0" encoding="utf-8"?>\n<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">\n  <solid android:color="#F24E1E"/>\n</shape>\n' > app/src/main/res/drawable/ic_launcher_background.xml
+          printf '<?xml version="1.0" encoding="utf-8"?>\n<vector xmlns:android="http://schemas.android.com/apk/res/android"\n  android:width="108dp" android:height="108dp"\n  android:viewportWidth="108" android:viewportHeight="108">\n  <group android:translateX="22" android:translateY="22">\n    <path android:fillColor="#FFFFFF" android:pathData="M16,40 L16,24 Q16,18 22,18 L30,18 Q33,18 33,21 Q33,24 30,24 L24,24 Q22,24 22,26 L22,40 Q22,43 19,43 Q16,43 16,40 Z"/>\n    <path android:fillColor="#FFFFFF" android:pathData="M36,40 L36,33 L42,33 Q45,33 45,30.5 Q45,28 42,28 L36,28 L36,24 L43,24 Q49,24 49,30.5 Q49,37 43,37 L42,37 L42,40 Q42,43 39,43 Q36,43 36,40 Z"/>\n  </group>\n</vector>\n' > app/src/main/res/drawable/ic_launcher_foreground.xml
+          ICON_XML='<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n  <background android:drawable="@drawable/ic_launcher_background"/>\n  <foreground android:drawable="@drawable/ic_launcher_foreground"/>\n</adaptive-icon>\n'
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            mkdir -p "app/src/main/res/mipmap-${density}"
+            printf "$ICON_XML" > "app/src/main/res/mipmap-${density}/ic_launcher.xml"
           done
-          echo "Generated launcher icons:"
-          find app/src/main/res/mipmap-* -name "*.png" -exec ls -la {} \;
+          echo "Generated adaptive launcher icons"
 
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon
