@@ -34,8 +34,8 @@ class OtaUpdateManager(
                     return@withContext
                 }
 
-                val currentVersionCode = BuildConfig.VERSION_CODE
-                val serverVersionCode = update.versionCode ?: 0
+                val currentVersionCode: Int = BuildConfig.VERSION_CODE
+                val serverVersionCode: Int = update.versionCode ?: 0
 
                 if (serverVersionCode <= currentVersionCode) {
                     return@withContext
