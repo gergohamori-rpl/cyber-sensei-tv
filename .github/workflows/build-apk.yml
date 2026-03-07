@@ -31,12 +31,18 @@ jobs:
       - name: Setup Gradle Wrapper
         run: |
           mkdir -p gradle/wrapper
-          curl -sL "https://services.gradle.org/distributions/gradle-8.5-bin.zip" -o /tmp/gradle-8.5.zip
-          unzip -qo /tmp/gradle-8.5.zip -d /tmp/gradle-extract
-          cp /tmp/gradle-extract/gradle-8.5/lib/gradle-wrapper-*.jar gradle/wrapper/gradle-wrapper.jar 2>/dev/null || true
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            curl -sL "https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
-          fi
+          curl -sL -o gradle/wrapper/gradle-wrapper.jar \
+            "https://services.gradle.org/distributions/gradle-8.5-wrapper.jar"
+          cat > gradle/wrapper/gradle-wrapper.properties << 'PROPS'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+          networkTimeout=10000
+          validateDistributionUrl=true
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          PROPS
+          sed -i 's/^          //' gradle/wrapper/gradle-wrapper.properties
           cat > gradlew << 'GRADLEW'
           #!/bin/sh
           APP_HOME=$( cd "${APP_HOME:-$(dirname "$0")}" > /dev/null && pwd -P ) || exit
