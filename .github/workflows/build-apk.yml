@@ -43,37 +43,31 @@ jobs:
           printf '#!/bin/sh\nAPP_HOME=$( cd "${APP_HOME:-$(dirname "$0")}" > /dev/null && pwd -P ) || exit\nCLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar\nexec java $JAVA_OPTS -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n' > gradlew
           chmod +x gradlew
 
-      - name: Generate launcher icons
+      - name: Restore signing keystore
         run: |
-          python3 -c "
-          import struct, zlib
-          def make_png(w, h, r, g, b):
-              def chunk(ctype, data):
-                  c = ctype + data
-                  return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-              raw = b''
-              for _ in range(h):
-                  raw += b'\x00' + bytes([r, g, b]) * w
-              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
-          sizes = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
-          import os
-          for density, px in sizes.items():
-              d = f'app/src/main/res/mipmap-{density}'
-              os.makedirs(d, exist_ok=True)
-              with open(f'{d}/ic_launcher.png', 'wb') as f:
-                  f.write(make_png(px, px, 0xF2, 0x4E, 0x1E))
-          print('Generated PNG launcher icons')
-          "
-          find app/src/main/res/mipmap-* -name "*.png" -exec ls -la {} \;
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
+            echo "Restored keystore from secret"
+          else
+            keytool -genkey -v -keystore release-key.jks \
+              -keyalg RSA -keysize 2048 -validity 36500 \
+              -alias cybersensei \
+              -storepass cybersensei \
+              -keypass cybersensei \
+              -dname "CN=Cyber Sensei, OU=TV, O=CyberSensei, L=Budapest, ST=Budapest, C=HU"
+            echo "Generated new keystore (no KEYSTORE_BASE64 secret found)"
+            echo "IMPORTANT: Save this keystore as KEYSTORE_BASE64 secret for consistent signing!"
+            base64 -w 0 release-key.jks > keystore_base64.txt
+            echo "Base64 keystore saved to keystore_base64.txt artifact"
+          fi
 
-      - name: Generate signing keystore
-        run: |
-          keytool -genkey -v -keystore release-key.jks \
-            -keyalg RSA -keysize 2048 -validity 36500 \
-            -alias cybersensei \
-            -storepass cybersensei \
-            -keypass cybersensei \
-            -dname "CN=Cyber Sensei, OU=TV, O=CyberSensei, L=Budapest, ST=Budapest, C=HU"
+      - name: Upload keystore artifact (first run only)
+        if: ${{ !secrets.KEYSTORE_BASE64 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: keystore-base64
+          path: keystore_base64.txt
+        continue-on-error: true
 
       - name: Set version from build number
         run: |
