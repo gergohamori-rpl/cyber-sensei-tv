@@ -88,6 +88,12 @@ class MediaDownloadManager(
         val toDownload = serverItems.filter { it.mediaItemId !in localItemIds }
         val toDelete = localFiles.filter { it.mediaItemId !in serverItemIds }
 
+        val sortedDownloads = toDownload.sortedBy { it.fileSize ?: Long.MAX_VALUE }
+
+        for (item in sortedDownloads) {
+            downloadWithRetry(item)
+        }
+
         for (entity in toDelete) {
             try {
                 File(entity.filePath).delete()
@@ -96,12 +102,6 @@ class MediaDownloadManager(
             } catch (e: Exception) {
                 LogCollector.error("sync", "Failed to delete media: ${entity.fileName}", errorCode = "DELETE_ERROR")
             }
-        }
-
-        val sortedDownloads = toDownload.sortedBy { it.fileSize ?: Long.MAX_VALUE }
-
-        for (item in sortedDownloads) {
-            downloadWithRetry(item)
         }
 
         val settingsChanged = muteAudio != prevMuteAudio || videoRotation != prevVideoRotation

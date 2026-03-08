@@ -140,7 +140,10 @@ class PlaybackService : Service() {
     }
 
     private fun playCurrentItem() {
-        if (currentPlaylist.isEmpty()) return
+        if (currentPlaylist.isEmpty()) {
+            updateNotification("Waiting for media...")
+            return
+        }
         if (currentIndex >= currentPlaylist.size) {
             currentIndex = 0
         }
@@ -154,7 +157,8 @@ class PlaybackService : Service() {
             return
         }
 
-        val isImage = media.mediaType.startsWith("image")
+        val imageExtensions = listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
+        val isImage = media.mediaType.startsWith("image") || media.mediaType == "carousel" || file.extension.lowercase() in imageExtensions
 
         if (isImage) {
             isShowingImage = true
