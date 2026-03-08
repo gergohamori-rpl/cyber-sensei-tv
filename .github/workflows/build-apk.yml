@@ -66,6 +66,15 @@ jobs:
           "
           find app/src/main/res/mipmap-* -name "*.png" -exec ls -la {} \;
 
+      - name: Generate signing keystore
+        run: |
+          keytool -genkey -v -keystore release-key.jks \
+            -keyalg RSA -keysize 2048 -validity 36500 \
+            -alias cybersensei \
+            -storepass cybersensei \
+            -keypass cybersensei \
+            -dname "CN=Cyber Sensei, OU=TV, O=CyberSensei, L=Budapest, ST=Budapest, C=HU"
+
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon
 

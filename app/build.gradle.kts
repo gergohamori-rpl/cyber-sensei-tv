@@ -16,10 +16,20 @@ android {
         versionName = "1.0.0"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("${project.rootDir}/release-key.jks")
+            storePassword = "cybersensei"
+            keyAlias = "cybersensei"
+            keyPassword = "cybersensei"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
