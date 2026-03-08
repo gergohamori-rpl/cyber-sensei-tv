@@ -14,6 +14,7 @@ data class PlaylistData(
     val transitionType: String,
     val transitionDurationMs: Int,
     val imageDurationSec: Int,
+    val showMediaTitle: Boolean = true,
     val items: List<PlaylistItem>
 )
 

@@ -57,15 +57,19 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     media?.let {
-                        mediaTitle.text = it.fileName
-                        mediaTitle.visibility = View.VISIBLE
-                        mediaTitle.alpha = 1f
-                        handler.removeCallbacksAndMessages("hide_title")
-                        handler.postDelayed({
-                            mediaTitle.animate().alpha(0f).setDuration(500).withEndAction {
-                                mediaTitle.visibility = View.GONE
-                            }.start()
-                        }, 5000)
+                        if (downloadManager?.showMediaTitle != false) {
+                            mediaTitle.text = it.fileName
+                            mediaTitle.visibility = View.VISIBLE
+                            mediaTitle.alpha = 1f
+                            handler.removeCallbacksAndMessages("hide_title")
+                            handler.postDelayed({
+                                mediaTitle.animate().alpha(0f).setDuration(500).withEndAction {
+                                    mediaTitle.visibility = View.GONE
+                                }.start()
+                            }, 5000)
+                        } else {
+                            mediaTitle.visibility = View.GONE
+                        }
                     }
                 }
             }
