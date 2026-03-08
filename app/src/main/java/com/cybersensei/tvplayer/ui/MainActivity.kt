@@ -9,10 +9,12 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -147,6 +149,12 @@ class MainActivity : AppCompatActivity() {
                             downloadManager?.syncPlaylist()
                         }
                     }
+                    "update" -> {
+                        scope.launch(Dispatchers.IO) {
+                            LogCollector.info("command", "Executing update command")
+                            otaManager?.checkAndUpdate()
+                        }
+                    }
                 }
             }
         }
@@ -168,6 +176,10 @@ class MainActivity : AppCompatActivity() {
             TimeSync.sync(baseUrl, apiKey)
             TimeSync.saveOffset(prefs)
             otaManager?.checkAndUpdate()
+            while (isActive) {
+                delay(30 * 60 * 1000L)
+                otaManager?.checkAndUpdate()
+            }
         }
     }
 
@@ -209,24 +221,45 @@ class MainActivity : AppCompatActivity() {
     private fun applyRotation(degrees: Int) {
         currentRotation = degrees
         handler.post {
-            val rotation = degrees.toFloat()
-            playerView.rotation = rotation
-            imageView.rotation = rotation
+            val displayMetrics = resources.displayMetrics
+            val screenW = displayMetrics.widthPixels
+            val screenH = displayMetrics.heightPixels
+
             if (degrees == 90 || degrees == 270) {
-                val displayMetrics = resources.displayMetrics
-                val screenW = displayMetrics.widthPixels.toFloat()
-                val screenH = displayMetrics.heightPixels.toFloat()
-                playerView.scaleX = screenH / screenW
-                playerView.scaleY = screenW / screenH
-                imageView.scaleX = screenH / screenW
-                imageView.scaleY = screenW / screenH
+                val playerParams = FrameLayout.LayoutParams(screenH, screenW)
+                playerParams.gravity = Gravity.CENTER
+                playerView.layoutParams = playerParams
+
+                val imageParams = FrameLayout.LayoutParams(screenH, screenW)
+                imageParams.gravity = Gravity.CENTER
+                imageView.layoutParams = imageParams
             } else {
-                playerView.scaleX = 1f
-                playerView.scaleY = 1f
-                imageView.scaleX = 1f
-                imageView.scaleY = 1f
+                val playerParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                playerView.layoutParams = playerParams
+
+                val imageParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                imageView.layoutParams = imageParams
             }
-            LogCollector.info("rotation", "Applied rotation: ${degrees}°")
+
+            playerView.rotation = degrees.toFloat()
+            imageView.rotation = degrees.toFloat()
+            playerView.scaleX = 1f
+            playerView.scaleY = 1f
+            imageView.scaleX = 1f
+            imageView.scaleY = 1f
+
+            LogCollector.info("rotation", "Applied rotation: ${degrees}°", details = mapOf(
+                "screenW" to screenW,
+                "screenH" to screenH,
+                "viewW" to if (degrees == 90 || degrees == 270) screenH else screenW,
+                "viewH" to if (degrees == 90 || degrees == 270) screenW else screenH
+            ))
         }
     }
 

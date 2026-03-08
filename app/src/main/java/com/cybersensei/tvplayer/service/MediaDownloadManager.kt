@@ -23,6 +23,7 @@ class MediaDownloadManager(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     var onPlaylistUpdated: (() -> Unit)? = null
+    private var initialSyncDone = false
     var currentPlaylistItems: List<PlaylistItem> = emptyList()
         private set
     var shuffle: Boolean = false
@@ -68,6 +69,10 @@ class MediaDownloadManager(
 
         val playlist = response.body()!!.playlist!!
         val serverItems = playlist.items
+
+        val prevMuteAudio = muteAudio
+        val prevVideoRotation = videoRotation
+
         shuffle = playlist.shuffle
         loop = playlist.loop
         imageDurationSec = playlist.imageDurationSec
@@ -99,7 +104,16 @@ class MediaDownloadManager(
             downloadWithRetry(item)
         }
 
-        if (toDownload.isNotEmpty() || toDelete.isNotEmpty()) {
+        val settingsChanged = muteAudio != prevMuteAudio || videoRotation != prevVideoRotation
+        val itemsChanged = toDownload.isNotEmpty() || toDelete.isNotEmpty()
+        if (itemsChanged || settingsChanged || !initialSyncDone) {
+            if (settingsChanged) {
+                LogCollector.info("sync", "Settings changed", details = mapOf(
+                    "muteAudio" to muteAudio,
+                    "videoRotation" to videoRotation
+                ))
+            }
+            initialSyncDone = true
             onPlaylistUpdated?.invoke()
         }
 
