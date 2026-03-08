@@ -43,6 +43,41 @@ jobs:
           printf '#!/bin/sh\nAPP_HOME=$( cd "${APP_HOME:-$(dirname "$0")}" > /dev/null && pwd -P ) || exit\nCLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar\nexec java $JAVA_OPTS -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n' > gradlew
           chmod +x gradlew
 
+      - name: Ensure launcher icons exist
+        run: |
+          if [ ! -f "app/src/main/res/mipmap-hdpi/ic_launcher.png" ]; then
+            echo "No launcher icons found, generating fallback icons..."
+            python3 -c "
+          import struct, zlib
+          def make_png(w, h, r, g, b):
+              def chunk(ctype, data):
+                  c = ctype + data
+                  return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+              raw = b''
+              for y in range(h):
+                  row = b'\x00'
+                  for x in range(w):
+                      cx, cy = x - w//2, y - h//2
+                      if cx*cx + cy*cy < (w//2 - 2)**2:
+                          row += bytes([0xF2, 0x4E, 0x1E])
+                      else:
+                          row += bytes([0x1A, 0x1A, 0x2E])
+                  raw += row
+              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+          import os
+          sizes = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
+          for density, px in sizes.items():
+              d = f'app/src/main/res/mipmap-{density}'
+              os.makedirs(d, exist_ok=True)
+              with open(f'{d}/ic_launcher.png', 'wb') as f:
+                  f.write(make_png(px, px, 0xF2, 0x4E, 0x1E))
+          print('Generated fallback launcher icons')
+          "
+          else
+            echo "Launcher icons already present"
+            find app/src/main/res/mipmap-* -name "*.png" -exec ls -la {} \;
+          fi
+
       - name: Restore signing keystore
         run: |
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
