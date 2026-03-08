@@ -159,7 +159,6 @@ class MainActivity : AppCompatActivity() {
             val files = downloadManager?.getLocalMediaFiles() ?: emptyList()
             if (files.isNotEmpty()) {
                 playbackService?.muteAudio = downloadManager?.muteAudio ?: false
-                playbackService?.videoRotation = downloadManager?.videoRotation ?: 0
                 applyRotation(downloadManager?.videoRotation ?: 0)
                 playbackService?.loadPlaylist(
                     files,
@@ -177,7 +176,6 @@ class MainActivity : AppCompatActivity() {
         if (files.isNotEmpty()) {
             playbackService?.let { service ->
                 service.muteAudio = downloadManager?.muteAudio ?: false
-                service.videoRotation = downloadManager?.videoRotation ?: 0
                 applyRotation(downloadManager?.videoRotation ?: 0)
                 if (service.getCurrentMedia() != null) {
                     service.reloadPlaylist(files, downloadManager?.shuffle ?: false)
@@ -189,7 +187,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var currentRotation: Int = 0
+
     private fun applyRotation(degrees: Int) {
+        currentRotation = degrees
         handler.post {
             val rotation = degrees.toFloat()
             playerView.rotation = rotation
@@ -198,17 +199,17 @@ class MainActivity : AppCompatActivity() {
                 val displayMetrics = resources.displayMetrics
                 val screenW = displayMetrics.widthPixels.toFloat()
                 val screenH = displayMetrics.heightPixels.toFloat()
-                val scale = screenW / screenH
-                playerView.scaleX = scale
-                playerView.scaleY = scale
-                imageView.scaleX = scale
-                imageView.scaleY = scale
+                playerView.scaleX = screenH / screenW
+                playerView.scaleY = screenW / screenH
+                imageView.scaleX = screenH / screenW
+                imageView.scaleY = screenW / screenH
             } else {
                 playerView.scaleX = 1f
                 playerView.scaleY = 1f
                 imageView.scaleX = 1f
                 imageView.scaleY = 1f
             }
+            LogCollector.info("rotation", "Applied rotation: ${degrees}°")
         }
     }
 

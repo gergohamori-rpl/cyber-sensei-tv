@@ -104,7 +104,6 @@ class PlaybackService : Service() {
     }
 
     var muteAudio: Boolean = false
-    var videoRotation: Int = 0
 
     fun loadPlaylist(files: List<MediaFileEntity>, shuffle: Boolean, loop: Boolean) {
         currentPlaylist = if (shuffle) files.shuffled() else files
