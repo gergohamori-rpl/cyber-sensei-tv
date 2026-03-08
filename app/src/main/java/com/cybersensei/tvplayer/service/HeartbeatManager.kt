@@ -28,6 +28,7 @@ class HeartbeatManager(
     var isOnline: Boolean = true
         private set
     var onConnectionStatusChanged: ((Boolean) -> Unit)? = null
+    var onCommandReceived: ((String) -> Unit)? = null
 
     fun start(intervalMs: Long = 60000L) {
         heartbeatJob?.cancel()
@@ -77,6 +78,11 @@ class HeartbeatManager(
                     isOnline = true
                     onConnectionStatusChanged?.invoke(true)
                     LogCollector.info("heartbeat", "Connection restored")
+                }
+                val body = response.body()
+                body?.command?.let { cmd ->
+                    LogCollector.info("heartbeat", "Received command: $cmd")
+                    onCommandReceived?.invoke(cmd)
                 }
             } else {
                 LogCollector.restore(logs)

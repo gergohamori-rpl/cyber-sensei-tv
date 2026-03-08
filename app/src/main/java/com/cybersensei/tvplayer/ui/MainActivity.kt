@@ -132,6 +132,23 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
             }
+            onCommandReceived = { cmd ->
+                when (cmd) {
+                    "clear_cache" -> {
+                        scope.launch {
+                            LogCollector.info("command", "Executing clear_cache command")
+                            val dao = com.cybersensei.tvplayer.CyberSenseiApp.instance.database.mediaFileDao()
+                            val files = dao.getAll()
+                            for (entity in files) {
+                                try { java.io.File(entity.filePath).delete() } catch (_: Exception) {}
+                                dao.delete(entity)
+                            }
+                            LogCollector.info("command", "Cache cleared, ${files.size} files deleted")
+                            downloadManager?.syncPlaylist()
+                        }
+                    }
+                }
+            }
         }
 
         otaManager = OtaUpdateManager(this, baseUrl, apiKey)

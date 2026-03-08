@@ -50,7 +50,8 @@ data class HeartbeatResponse(
     val serverTime: String,
     val timestamp: Long,
     val hasUpdate: Boolean,
-    val latestVersion: LatestVersionInfo?
+    val latestVersion: LatestVersionInfo?,
+    val command: String? = null
 )
 
 data class LatestVersionInfo(
