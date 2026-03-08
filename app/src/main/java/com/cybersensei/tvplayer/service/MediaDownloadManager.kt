@@ -33,6 +33,10 @@ class MediaDownloadManager(
         private set
     var showMediaTitle: Boolean = true
         private set
+    var muteAudio: Boolean = false
+        private set
+    var videoRotation: Int = 0
+        private set
 
     fun startPeriodicSync(intervalMs: Long = 60000L) {
         syncJob?.cancel()
@@ -68,6 +72,8 @@ class MediaDownloadManager(
         loop = playlist.loop
         imageDurationSec = playlist.imageDurationSec
         showMediaTitle = playlist.showMediaTitle
+        muteAudio = playlist.muteAudio
+        videoRotation = playlist.videoRotation
         currentPlaylistItems = serverItems
 
         val localFiles = dao.getAll()

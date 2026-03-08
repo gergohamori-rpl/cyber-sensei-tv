@@ -103,14 +103,19 @@ class PlaybackService : Service() {
         }
     }
 
+    var muteAudio: Boolean = false
+    var videoRotation: Int = 0
+
     fun loadPlaylist(files: List<MediaFileEntity>, shuffle: Boolean, loop: Boolean) {
         currentPlaylist = if (shuffle) files.shuffled() else files
         currentIndex = 0
         player?.repeatMode = if (loop) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_OFF
+        player?.volume = if (muteAudio) 0f else 1f
         LogCollector.info("playback", "Playlist loaded", details = mapOf(
             "itemCount" to files.size,
             "shuffle" to shuffle,
-            "loop" to loop
+            "loop" to loop,
+            "muteAudio" to muteAudio
         ))
         if (currentPlaylist.isNotEmpty()) {
             playCurrentItem()
@@ -120,6 +125,7 @@ class PlaybackService : Service() {
     fun reloadPlaylist(files: List<MediaFileEntity>, shuffle: Boolean) {
         val currentMedia = getCurrentMedia()
         currentPlaylist = if (shuffle) files.shuffled() else files
+        player?.volume = if (muteAudio) 0f else 1f
 
         if (currentMedia != null) {
             val newIndex = currentPlaylist.indexOfFirst { it.mediaItemId == currentMedia.mediaItemId }
@@ -165,6 +171,7 @@ class PlaybackService : Service() {
             onMediaChanged?.invoke(media, false)
             val mediaItem = MediaItem.fromUri(android.net.Uri.fromFile(file))
             player?.setMediaItem(mediaItem)
+            player?.volume = if (muteAudio) 0f else 1f
             player?.prepare()
             player?.play()
             LogCollector.playback("Playing video: ${media.fileName}", media.mediaItemId, media.fileName)
