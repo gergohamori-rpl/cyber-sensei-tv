@@ -62,7 +62,7 @@ jobs:
           fi
 
       - name: Upload keystore artifact (first run only)
-        if: ${{ !secrets.KEYSTORE_BASE64 }}
+        if: hashFiles('keystore_base64.txt') != ''
         uses: actions/upload-artifact@v4
         with:
           name: keystore-base64
