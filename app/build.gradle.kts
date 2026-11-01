@@ -1,3 +1,6 @@
+import java.security.KeyStore
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -70,4 +73,27 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    testImplementation("junit:junit:4.13.2")
+}
+
+// Keep these gates in the build too: older CI workflows only invoke assembleRelease.
+val verifyOtaSigningKey = tasks.register("verifyOtaSigningKey") {
+    doLast {
+        val signing = android.signingConfigs.getByName("release")
+        val keyStore = KeyStore.getInstance("JKS")
+        signing.storeFile!!.inputStream().use {
+            keyStore.load(it, signing.storePassword!!.toCharArray())
+        }
+        val certificate = keyStore.getCertificate(signing.keyAlias).encoded
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(certificate).joinToString("") { "%02x".format(it) }
+        check(digest == "4f80b3383225468a86d938b84ddbf693f33d7cd94572010cbc1570ca0fcb31d5") {
+            "Signing key does not match the established TV OTA certificate"
+        }
+        logger.lifecycle("Established TV OTA signing certificate verified")
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    dependsOn("testReleaseUnitTest", verifyOtaSigningKey)
 }

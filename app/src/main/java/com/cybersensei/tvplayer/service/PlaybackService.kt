@@ -28,6 +28,15 @@ class PlaybackService : Service() {
     private var currentPlaylist: List<MediaFileEntity> = emptyList()
     private var currentIndex = 0
     private var isShowingImage = false
+    private var imageSessionToken = 0
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val health = PlaybackHealth()
+    private val nextItem = Runnable {
+        if (currentPlaylist.isNotEmpty()) {
+            currentIndex = (currentIndex + 1) % currentPlaylist.size
+            playCurrentItem()
+        }
+    }
 
     var onMediaChanged: ((MediaFileEntity?, Boolean) -> Unit)? = null
     var imageDisplayManager: ImageDisplayManager? = null
@@ -52,6 +61,9 @@ class PlaybackService : Service() {
 
     override fun onDestroy() {
         LogCollector.info("service", "PlaybackService destroyed")
+        handler.removeCallbacksAndMessages(null)
+        imageDisplayManager?.hide()
+        onMediaChanged = null
         releaseWakeLock()
         player?.release()
         player = null
@@ -106,6 +118,7 @@ class PlaybackService : Service() {
     var muteAudio: Boolean = false
 
     fun loadPlaylist(files: List<MediaFileEntity>, shuffle: Boolean, loop: Boolean) {
+        handler.removeCallbacks(nextItem)
         currentPlaylist = if (shuffle) files.shuffled() else files
         currentIndex = 0
         player?.repeatMode = if (loop) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_OFF
@@ -116,9 +129,7 @@ class PlaybackService : Service() {
             "loop" to loop,
             "muteAudio" to muteAudio
         ))
-        if (currentPlaylist.isNotEmpty()) {
-            playCurrentItem()
-        }
+        playCurrentItem()
     }
 
     fun reloadPlaylist(files: List<MediaFileEntity>, shuffle: Boolean) {
@@ -128,18 +139,22 @@ class PlaybackService : Service() {
 
         if (currentMedia != null) {
             val newIndex = currentPlaylist.indexOfFirst { it.mediaItemId == currentMedia.mediaItemId }
-            if (newIndex >= 0) {
+            if (newIndex >= 0 && currentPlaylist[newIndex].filePath == currentMedia.filePath &&
+                File(currentMedia.filePath).isFile && isPlaying()) {
                 currentIndex = newIndex
                 return
             }
         }
         currentIndex = 0
-        if (currentPlaylist.isNotEmpty()) {
-            playCurrentItem()
-        }
+        playCurrentItem()
     }
 
     private fun playCurrentItem() {
+        handler.removeCallbacks(nextItem)
+        imageSessionToken++
+        isShowingImage = false
+        imageDisplayManager?.hide()
+        player?.stop()
         if (currentPlaylist.isEmpty()) {
             updateNotification("Waiting for media...")
             return
@@ -148,28 +163,38 @@ class PlaybackService : Service() {
             currentIndex = 0
         }
 
-        val media = currentPlaylist[currentIndex]
-        val file = File(media.filePath)
-
-        if (!file.exists()) {
-            LogCollector.warn("playback", "File missing: ${media.fileName}", details = mapOf("path" to media.filePath))
-            playNext()
+        // At most one pass: an entirely missing playlist must never recurse.
+        val playableIndex = findPlayableIndex(currentPlaylist.size, currentIndex) { index ->
+                File(currentPlaylist[index].filePath).let { it.isFile && it.length() > 0 }
+            }
+        if (playableIndex == null) {
+            LogCollector.warn("playback", "No playable local files; waiting for cache repair")
+            updateNotification("Waiting for media download...")
             return
         }
+        currentIndex = playableIndex
+        val media = currentPlaylist[currentIndex]
+        val file = File(media.filePath)
+        health.reset(android.os.SystemClock.elapsedRealtime())
 
         val imageExtensions = listOf("jpg", "jpeg", "png", "gif", "webp", "bmp")
         val isImage = media.mediaType.startsWith("image") || media.mediaType == "carousel" || file.extension.lowercase() in imageExtensions
 
         if (isImage) {
             isShowingImage = true
+            imageSessionToken++
+            val capturedToken = imageSessionToken
             player?.pause()
             onMediaChanged?.invoke(media, true)
             imageDisplayManager?.showImage(file) {
-                playNext()
+                if (capturedToken == imageSessionToken) {
+                    playNext()
+                }
             }
             LogCollector.playback("Showing image: ${media.fileName}", media.mediaItemId, media.fileName)
         } else {
             isShowingImage = false
+            imageSessionToken++
             imageDisplayManager?.hide()
             onMediaChanged?.invoke(media, false)
             val mediaItem = MediaItem.fromUri(android.net.Uri.fromFile(file))
@@ -184,12 +209,27 @@ class PlaybackService : Service() {
     }
 
     private fun playNext() {
-        if (currentPlaylist.isEmpty()) return
-        currentIndex++
-        if (currentIndex >= currentPlaylist.size) {
-            currentIndex = 0
+        handler.removeCallbacks(nextItem)
+        // Posting also bounds repeated decoder errors for a corrupt single-item playlist.
+        handler.postDelayed(nextItem, 250L)
+    }
+
+    fun recoverIfStalled(): Boolean {
+        if (currentPlaylist.isEmpty()) return false
+        val stuck = health.stalled(
+            android.os.SystemClock.elapsedRealtime(), player?.currentPosition ?: 0L,
+            isShowingImage, (imageDisplayManager?.getDuration() ?: 10) * 1000L
+        )
+        if (stuck) {
+            LogCollector.warn("playback", "Watchdog: playback made no progress; rebuilding player",
+                details = mapOf("mediaItemId" to getCurrentMedia()?.mediaItemId))
+            player?.release()
+            initPlayer()
+            onMediaChanged?.invoke(getCurrentMedia(), isShowingImage)
+            playNext()
+            health.reset(android.os.SystemClock.elapsedRealtime())
         }
-        playCurrentItem()
+        return stuck
     }
 
     fun getCurrentMedia(): MediaFileEntity? {

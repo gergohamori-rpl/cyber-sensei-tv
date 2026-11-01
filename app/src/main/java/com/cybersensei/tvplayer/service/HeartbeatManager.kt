@@ -52,7 +52,7 @@ class HeartbeatManager(
 
     private suspend fun sendHeartbeat() {
         try {
-            val logs = LogCollector.flush()
+            val logs = LogCollector.pending()
             val mediaDir = File(context.filesDir, "media")
             val storageUsed = calculateDirSize(mediaDir)
 
@@ -74,6 +74,7 @@ class HeartbeatManager(
 
             val response = api.sendHeartbeat(request)
             if (response.isSuccessful) {
+                LogCollector.acknowledge(logs)
                 if (!isOnline) {
                     isOnline = true
                     onConnectionStatusChanged?.invoke(true)
@@ -85,9 +86,10 @@ class HeartbeatManager(
                     onCommandReceived?.invoke(cmd)
                 }
             } else {
-                LogCollector.restore(logs)
                 setOffline()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(tag, "Heartbeat failed", e)
             setOffline()

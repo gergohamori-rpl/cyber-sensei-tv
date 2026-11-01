@@ -7,9 +7,42 @@ import java.util.*
 
 object LogCollector {
 
-    private val buffer = mutableListOf<LogEntry>()
+    private val buffer = PendingLogs<LogEntry>()
     private val lock = Any()
-    private const val MAX_BUFFER_SIZE = 500
+    private var diskFile: android.util.AtomicFile? = null
+    private val writer = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val gson = com.google.gson.Gson()
+
+    fun initialize(context: android.content.Context) {
+        synchronized(lock) {
+            diskFile = android.util.AtomicFile(java.io.File(context.filesDir, "pending-tv-logs.json"))
+            try {
+                diskFile!!.openRead().bufferedReader().use { reader ->
+                    gson.fromJson(reader, Array<LogEntry>::class.java)?.forEach { buffer.add(it) }
+                }
+            } catch (_: java.io.FileNotFoundException) {
+                // First launch has no persisted queue.
+            } catch (e: Exception) {
+                android.util.Log.w("LogCollector", "Cannot restore pending TV logs", e)
+            }
+        }
+    }
+
+    private fun persist() {
+        val snapshot = buffer.snapshot()
+        val file = diskFile ?: return
+        writer.execute {
+            var stream: java.io.FileOutputStream? = null
+            try {
+                stream = file.startWrite()
+                stream.write(gson.toJson(snapshot).toByteArray(Charsets.UTF_8))
+                file.finishWrite(stream)
+            } catch (e: Exception) {
+                stream?.let { file.failWrite(it) }
+                android.util.Log.w("LogCollector", "Cannot persist pending TV logs", e)
+            }
+        }
+    }
 
     fun log(
         logType: String,
@@ -40,26 +73,16 @@ object LogCollector {
         )
         synchronized(lock) {
             buffer.add(entry)
-            if (buffer.size > MAX_BUFFER_SIZE) {
-                buffer.removeAt(0)
-            }
+            persist()
         }
     }
 
-    fun flush(): List<LogEntry> {
-        synchronized(lock) {
-            val entries = buffer.toList()
-            buffer.clear()
-            return entries
-        }
-    }
+    fun pending(): List<LogEntry> = synchronized(lock) { buffer.snapshot() }
 
-    fun restore(entries: List<LogEntry>) {
+    fun acknowledge(entries: List<LogEntry>) {
         synchronized(lock) {
-            buffer.addAll(0, entries)
-            while (buffer.size > MAX_BUFFER_SIZE) {
-                buffer.removeAt(buffer.size - 1)
-            }
+            buffer.acknowledge(entries)
+            persist()
         }
     }
 

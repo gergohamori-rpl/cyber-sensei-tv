@@ -3,7 +3,8 @@ package com.cybersensei.tvplayer.data.model
 import com.google.gson.annotations.SerializedName
 
 data class PlaylistResponse(
-    val playlist: PlaylistData?
+    val playlist: PlaylistData?,
+    val fallbackItems: List<PlaylistItem> = emptyList()
 )
 
 data class PlaylistData(
@@ -19,6 +20,9 @@ data class PlaylistData(
     val videoRotation: Int = 0,
     val items: List<PlaylistItem>
 )
+
+// Top-level response also carries fallback items (outside the playlist object)
+// so they're available even when playlist == null
 
 data class PlaylistItem(
     val id: Int,

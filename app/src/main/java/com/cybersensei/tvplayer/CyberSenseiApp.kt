@@ -14,6 +14,7 @@ class CyberSenseiApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        com.cybersensei.tvplayer.service.LogCollector.initialize(this)
         database = AppDatabase.getInstance(this)
         createNotificationChannel()
     }

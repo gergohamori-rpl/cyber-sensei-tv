@@ -1,67 +1,67 @@
 package com.cybersensei.tvplayer.service
 
 import android.graphics.BitmapFactory
-import android.os.Handler
-import android.os.Looper
 import android.view.View
-import android.view.animation.AlphaAnimation
 import android.widget.ImageView
+import kotlinx.coroutines.*
 import java.io.File
 
 class ImageDisplayManager(
     private val imageView: ImageView,
     private var durationSec: Int = 10
 ) {
-    private val handler = Handler(Looper.getMainLooper())
-    private var nextCallback: Runnable? = null
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var displayJob: Job? = null
 
-    fun setDuration(seconds: Int) {
-        durationSec = seconds
-    }
+    fun setDuration(seconds: Int) { durationSec = seconds.coerceIn(1, 86400) }
+    fun getDuration(): Int = durationSec
 
     fun showImage(file: File, onComplete: () -> Unit) {
-        nextCallback?.let { handler.removeCallbacks(it) }
-
-        handler.post {
+        hide()
+        displayJob = scope.launch {
             try {
-                val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-                if (bitmap != null) {
+                val bitmap = withContext(Dispatchers.IO) {
+                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(file.absolutePath, options)
+                    // Keep decoded images bounded even when the source is a large camera photo.
+                    var sample = 1
+                    while (options.outWidth / sample > 1920 || options.outHeight / sample > 1920) {
+                        sample *= 2
+                    }
+                    options.inJustDecodeBounds = false
+                    options.inSampleSize = sample
+                    BitmapFactory.decodeFile(file.absolutePath, options)
+                }
+                if (bitmap == null) {
+                    LogCollector.error("playback", "Failed to decode image: ${file.name}", "DECODE_ERROR")
+                } else {
                     imageView.setImageBitmap(bitmap)
                     imageView.visibility = View.VISIBLE
-
-                    val fadeIn = AlphaAnimation(0f, 1f).apply {
-                        duration = 500
-                        fillAfter = true
-                    }
-                    imageView.startAnimation(fadeIn)
-
-                    nextCallback = Runnable {
-                        val fadeOut = AlphaAnimation(1f, 0f).apply {
-                            duration = 500
-                            fillAfter = true
-                        }
-                        imageView.startAnimation(fadeOut)
-                        handler.postDelayed({
-                            imageView.visibility = View.GONE
-                            onComplete()
-                        }, 500)
-                    }
-                    handler.postDelayed(nextCallback!!, durationSec * 1000L)
-                } else {
-                    LogCollector.error("playback", "Failed to decode image: ${file.name}", errorCode = "DECODE_ERROR")
-                    onComplete()
+                    delay(durationSec * 1000L)
+                    imageView.visibility = View.GONE
+                    imageView.setImageDrawable(null)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                LogCollector.error("playback", "Image display error: ${e.message}", errorCode = "IMAGE_ERROR")
-                onComplete()
+                LogCollector.error("playback", "Image display error: ${e.message}", "IMAGE_ERROR")
+            } catch (e: OutOfMemoryError) {
+                LogCollector.error("playback", "Image too large: ${file.name}", "IMAGE_MEMORY")
             }
+            onComplete()
         }
     }
 
     fun hide() {
-        nextCallback?.let { handler.removeCallbacks(it) }
-        handler.post {
-            imageView.visibility = View.GONE
-        }
+        displayJob?.cancel()
+        displayJob = null
+        imageView.clearAnimation()
+        imageView.visibility = View.GONE
+        imageView.setImageDrawable(null)
+    }
+
+    fun release() {
+        hide()
+        scope.cancel()
     }
 }

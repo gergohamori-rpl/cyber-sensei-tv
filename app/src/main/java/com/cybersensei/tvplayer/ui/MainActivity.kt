@@ -122,6 +122,16 @@ class MainActivity : AppCompatActivity() {
                     reloadCurrentPlaylist()
                 }
             }
+            onOfflineDetected = {
+                handler.post {
+                    loadFallbackPlaylist()
+                }
+            }
+            onOnlineRestored = {
+                scope.launch {
+                    reloadCurrentPlaylist()
+                }
+            }
         }
 
         heartbeatManager = HeartbeatManager(this, baseUrl, apiKey).apply {
@@ -172,6 +182,26 @@ class MainActivity : AppCompatActivity() {
         downloadManager?.startPeriodicSync()
         heartbeatManager?.start()
 
+        // Check actual position/image deadlines, not just ExoPlayer's playing flag.
+        scope.launch {
+            while (isActive) {
+                delay(15_000L)
+                val service = playbackService ?: continue
+                service.recoverIfStalled()
+                if (service.getCurrentMedia() == null) {
+                    val files = downloadManager?.getLocalMediaFiles() ?: emptyList()
+                    if (files.isNotEmpty()) {
+                        LogCollector.warn("watchdog", "Playback stopped with media available — restarting")
+                        service.loadPlaylist(
+                            files,
+                            downloadManager?.shuffle ?: false,
+                            downloadManager?.loop ?: true
+                        )
+                    }
+                }
+            }
+        }
+
         scope.launch(Dispatchers.IO) {
             TimeSync.sync(baseUrl, apiKey)
             TimeSync.saveOffset(prefs)
@@ -196,6 +226,7 @@ class MainActivity : AppCompatActivity() {
                 )
             } else {
                 LogCollector.info("playback", "No media files available yet, waiting for sync")
+                loadFallbackPlaylist()
             }
         }
     }
@@ -213,6 +244,18 @@ class MainActivity : AppCompatActivity() {
                 }
                 service.imageDisplayManager?.setDuration(downloadManager?.imageDurationSec ?: 10)
             }
+        }
+    }
+
+    private fun loadFallbackPlaylist() {
+        val fallbackFiles = downloadManager?.getFallbackLocalFiles() ?: return
+        if (fallbackFiles.isEmpty()) return
+        playbackService?.let { service ->
+            service.muteAudio = downloadManager?.muteAudio ?: false
+            applyRotation(downloadManager?.videoRotation ?: 0)
+            service.loadPlaylist(fallbackFiles, false, true)
+            LogCollector.info("playback", "Switched to offline fallback playlist",
+                details = mapOf("items" to fallbackFiles.size))
         }
     }
 
@@ -288,6 +331,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        playbackService?.onMediaChanged = null
+        playbackService?.imageDisplayManager?.release()
+        playbackService?.imageDisplayManager = null
+        playerView.player = null
+        handler.removeCallbacksAndMessages(null)
         if (bound) {
             unbindService(connection)
             bound = false
